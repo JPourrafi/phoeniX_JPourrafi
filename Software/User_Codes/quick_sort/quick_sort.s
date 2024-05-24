@@ -1,73 +1,101 @@
-    .data
-array:  .word 9, 4, 7, 3, 2, 8, 5, 1, 6
-length: .word 9
+main:
+    # Create stack
+    li      sp, 0xffc
+    addi    sp, sp, -48
+    sw      s0, 44(sp)
+    addi    s0, sp, 48
 
-    .text
-    .globl _start
-_start:
-    la t0, array           # Load address of array
-    lw t1, length          # Load length of array
-    addi t1, t1, -1        # Calculate the last index (length-1)
-    call quicksort         # Call quicksort(array, 0, length-1)
+    # Initialize arr[] to memory
+    li      a5, 3
+    sw      a5, -48(s0)
+    li      a5, 5
+    sw      a5, -44(s0)
+    li      a5, 1
+    sw      a5, -40(s0)
+    li      a5, 2
+    sw      a5, -36(s0)
+    li      a5, 4
+    sw      a5, -32(s0)
 
-    # Exit (using ecall)
-    li a7, 93              # ecall for exit
-    ecall
+    # Initialize low and high
+    li      a1, 0             # low = 0
+    li      a2, 4             # high = 4 (index of last element)
 
-# quicksort(array, low, high)
-quicksort:
-    bge a1, a2, qs_return  # if low >= high, return
-    mv t3, a1              # t3 = low
-    mv t4, a2              # t4 = high
-    mv a0, t0              # a0 = array
-    call partition         # partition(array, low, high)
-    mv t5, a0              # t5 = pivot index
+    # Compute base address of array
+    addi    a0, s0, -48       # a0 = base address of arr
 
-    mv a1, t3              # low
-    addi a2, t5, -1        # high = pivot_index - 1
-    call quicksort         # quicksort(array, low, pivot_index-1)
+    # Call quicksort
+    j       quicksort
 
-    addi a1, t5, 1         # low = pivot_index + 1
-    mv a2, t4              # high
-    call quicksort         # quicksort(array, pivot_index+1, high)
+main_return:
+    # Return
+    li      a5, 0
+    mv      a0, a5
+    lw      s0, 44(sp)
+    addi    sp, sp, 48
+    j       end
 
-qs_return:
-    ret
+# Swap function: void swap(int *a, int *b)
+swap:
+    lw      t0, 0(a0)             # Load value at a0 into t0
+    lw      t1, 0(a1)             # Load value at a1 into t1
+    sw      t1, 0(a0)             # Store t1 at a0
+    sw      t0, 0(a1)             # Store t0 at a1
+    j       main_return           # Return from function
 
-# partition(array, low, high) -> returns pivot index
+# Partition function: int partition(int arr[], int low, int high)
 partition:
-    mv t1, a1              # t1 = low
-    mv t2, a2              # t2 = high
-    slli t3, t2, 2         # t3 = high * 4 (word size)
-    add t3, t3, t0         # t3 = array + high * 4
-    lw t4, 0(t3)           # t4 = array[high] (pivot)
+    add     t0, a1, zero          # t0 = low
+    slli    t3, a2, 2             # t3 = high * 4
+    add     t3, t3, a0            # t3 = base + high * 4
+    lw      t1, 0(t3)             # t1 = arr[high]
+    addi    t2, a1, -1            # t2 = low - 1
 
-    addi t5, t1, -1        # t5 = low - 1
+.partition_loop:
+    blt     t0, a2, .partition_check  # if t0 < high, check
+    j       .partition_end            # else, end partition
 
-partition_loop:
-    addi t2, t2, -1        # high--
-    blt t2, t1, partition_end # if high < low, break
+.partition_check:
+    slli    t3, t0, 2             # t3 = t0 * 4
+    add     t4, a0, t3            # t4 = base + t0 * 4
+    lw      t5, 0(t4)             # t5 = arr[t0]
 
-    slli t3, t2, 2         # t3 = high * 4
-    add t3, t3, t0         # t3 = array + high * 4
-    lw t6, 0(t3)           # t6 = array[high]
+    blt     t5, t1, .partition_if  # if arr[t0] < pivot, swap
 
-    bge t6, t4, partition_loop # if array[high] >= pivot, continue
+    addi    t0, t0, 1             # t0++
+    j       .partition_loop       # Continue loop
 
-    addi t5, t5, 1         # low++
-    slli t7, t5, 2         # t7 = low * 4
-    add t7, t7, t0         # t7 = array + low * 4
-    lw t8, 0(t7)           # t8 = array[low]
-    sw t8, 0(t3)           # array[high] = array[low]
-    sw t6, 0(t7)           # array[low] = array[high]
+.partition_if:
+    addi    t2, t2, 1             # t2++
+    slli    t3, t2, 2             # t3 = t2 * 4
+    add     t4, a0, t3            # t4 = base + t2 * 4
+    mv      a3, t4                # a3 = &arr[t2]
+    slli    t3, t0, 2             # t3 = t0 * 4
+    add     t4, a0, t3            # t4 = base + t0 * 4
+    mv      a4, t4                # a4 = &arr[t0]
+    j       swap                  # swap(&arr[t2], &arr[t0])
 
-    j partition_loop
+.partition_end:
+    addi    t2, t2, 1             # t2++
+    slli    t3, t2, 2             # t3 = t2 * 4
+    add     t4, a0, t3            # t4 = base + t2 * 4
+    mv      a3, t4                # a3 = &arr[t2]
+    slli    t3, a2, 2             # t3 = high * 4
+    add     t4, a0, t3            # t4 = base + high * 4
+    j       swap                  # swap(&arr[t2], &arr[high])
 
-partition_end:
-    addi t5, t5, 1         # low++
-    slli t3, t5, 2         # t3 = low * 4
-    add t3, t3, t0         # t3 = array + low * 4
-    lw t6, 0(t3)           # t6 = array[low]
-    sw t4, 0(t3)           # array[low] = pivot
-    mv a0, t5              # return low (pivot index)
-    ret
+# Quick Sort function: void quicksort(int arr[], int low, int high)
+quicksort:
+    bge     a1, a2, quicksort_end # if low >= high, return
+
+    mv      a3, a0               # a3 = arr
+    mv      a4, a1               # a4 = low
+    mv      a5, a2               # a5 = high
+    j       partition            # pivot = partition(arr, low, high)
+
+quicksort_end:
+    j       main_return           # Return from function
+
+# End of program
+end:
+    ebreak
